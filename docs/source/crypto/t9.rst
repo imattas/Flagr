@@ -1,0 +1,8 @@
+:mod:`flagr.units.crypto.t9` --- T9 phone keypad cipher
+=========================================================
+
+.. automodule:: flagr.units.crypto.t9
+   :members:
+   :undoc-members:
+   :noindex:
+   :show-inheritance:
