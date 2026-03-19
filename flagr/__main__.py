@@ -86,6 +86,13 @@ def main():
         help="Display images as flagr finds them",
         default=False,
     )
+    parser.add_argument(
+        "--remote",
+        nargs=2,
+        metavar=("HOST", "PORT"),
+        help="Remote target for exploit delivery (e.g. --remote host.ctf.com 1337)",
+        default=None,
+    )
 
     # Add options for all the unit specific configurations
     for unit in manager.finder.units:
@@ -137,6 +144,26 @@ def main():
         manager["manager"]["imagegui"] = "yes"
     else:
         manager["manager"]["imagegui"] = "no"
+
+    # Handle --remote: set remote config and auto-queue network target if needed
+    if args.remote is not None:
+        remote_host, remote_port = args.remote[0], args.remote[1]
+        remote_str = f"{remote_host}:{remote_port}"
+
+        # Store in DEFAULT so all units can access via self.get("remote")
+        manager["DEFAULT"]["remote"] = remote_str
+
+        # Auto-enable auto mode for remote exploitation
+        manager["manager"]["auto"] = "yes"
+
+        # If no file/binary targets were given, queue the host:port as a
+        # network target so netcat/template_solver units can try it directly.
+        # If a binary IS given, also queue the remote as a second target so
+        # network units (banner grab, math solver, etc.) run against it too.
+        if not args.targets:
+            args.targets.append(remote_str)
+        else:
+            args.targets.append(remote_str)
 
     # Apply unit configurations
     args_dict = vars(args)  # We need this because configs have '.'

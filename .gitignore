@@ -2,6 +2,7 @@ __pycache__/
 results
 domains.txt
 env/
+venv/
 *.pyc
 test-results
 savedstate.sav

