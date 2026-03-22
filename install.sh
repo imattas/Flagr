@@ -254,59 +254,36 @@ pip3 install --break-system-packages "${FLAGR_SRC}" 2>/dev/null \
 
 ok "Python dependencies installed"
 
-# ── Install binary ────────────────────────────────────────────────────────
-info "Installing flagr binary..."
+# ── Put flagr on PATH ─────────────────────────────────────────────────────
+info "Installing flagr command..."
 
-# Detect architecture
-ARCH=$(uname -m)
-case "$ARCH" in
-    x86_64|amd64)   ARCH="x86_64" ;;
-    aarch64|arm64)   ARCH="aarch64" ;;
-    armv7l)          ARCH="armv7" ;;
-    i686|i386)       ARCH="i686" ;;
-esac
+# pip installs the entry point — find it and symlink to /usr/local/bin
+FOUND_BIN=$(command -v flagr 2>/dev/null || true)
 
-BINARY_INSTALLED=false
-
-# Try downloading arch-specific binary from GitHub releases
-VERSION=$(cat "${FLAGR_INSTALL_DIR}/VERSION" 2>/dev/null || echo "")
-if [[ -n "${VERSION}" ]]; then
-    RELEASE_URL="https://github.com/imattas/Flagr/releases/download/v${VERSION}/flagr-${ARCH}"
-    TMPBIN=$(mktemp)
-    if curl -sL --fail --max-time 60 -o "$TMPBIN" "$RELEASE_URL" 2>/dev/null \
-        && [[ -s "$TMPBIN" ]] && [[ "$(wc -c < "$TMPBIN")" -gt 1000 ]]; then
-        chmod +x "$TMPBIN"
-        cp "$TMPBIN" "${FLAGR_BIN_DIR}/flagr" 2>/dev/null && BINARY_INSTALLED=true
-    fi
-    rm -f "$TMPBIN" 2>/dev/null
+if [[ -z "${FOUND_BIN}" ]]; then
+    for candidate in \
+        /usr/local/bin/flagr \
+        /usr/bin/flagr \
+        /root/.local/bin/flagr; do
+        if [[ -f "${candidate}" ]]; then
+            FOUND_BIN="${candidate}"
+            break
+        fi
+    done
 fi
 
-# Try local dist
-if [[ "$BINARY_INSTALLED" = false && -f "${FLAGR_INSTALL_DIR}/dist/flagr" ]]; then
-    cp "${FLAGR_INSTALL_DIR}/dist/flagr" "${FLAGR_BIN_DIR}/flagr" 2>/dev/null && BINARY_INSTALLED=true
-fi
-
-# Fallback: use pip-installed entry point or create launcher
-if [[ "$BINARY_INSTALLED" = false ]]; then
-    FOUND_BIN=$(command -v flagr 2>/dev/null || true)
-
-    if [[ -n "${FOUND_BIN}" && "${FOUND_BIN}" != "${FLAGR_BIN_DIR}/flagr" ]]; then
-        ln -sf "${FOUND_BIN}" "${FLAGR_BIN_DIR}/flagr" 2>/dev/null || true
-    elif [[ -z "${FOUND_BIN}" ]]; then
-        cat > "${FLAGR_BIN_DIR}/flagr" <<'LAUNCHER'
+if [[ -n "${FOUND_BIN}" && "${FOUND_BIN}" != "${FLAGR_BIN_DIR}/flagr" ]]; then
+    ln -sf "${FOUND_BIN}" "${FLAGR_BIN_DIR}/flagr" 2>/dev/null || true
+elif [[ -z "${FOUND_BIN}" ]]; then
+    cat > "${FLAGR_BIN_DIR}/flagr" <<'LAUNCHER'
 #!/usr/bin/env python3
 from flagr.cli import main
 main()
 LAUNCHER
-        chmod +x "${FLAGR_BIN_DIR}/flagr"
-    fi
+    chmod +x "${FLAGR_BIN_DIR}/flagr"
 fi
 
-if [[ "$BINARY_INSTALLED" = true ]]; then
-    ok "flagr binary installed to ${FLAGR_BIN_DIR}/flagr (${ARCH})"
-else
-    ok "flagr installed to ${FLAGR_BIN_DIR}/flagr (pip)"
-fi
+ok "flagr installed to ${FLAGR_BIN_DIR}/flagr"
 
 # ── Done ───────────────────────────────────────────────────────────────────
 echo ""
