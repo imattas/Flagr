@@ -7,7 +7,7 @@
 #   # or
 #   chmod +x install.sh && sudo ./install.sh
 #
-set -euo pipefail
+set -uo pipefail
 
 # ── Config ──────────────────────────────────────────────────────────────────
 FLAGR_REPO="https://github.com/imattas/Flagr.git"
@@ -143,7 +143,7 @@ BREW_PKGS=(
 
 case "${PKG_MGR}" in
     apt)
-        apt-get update -qq
+        apt-get update -qq 2>/dev/null || warn "apt-get update had errors (non-fatal)"
         apt-get install -y -qq "${APT_PKGS[@]}" 2>/dev/null || warn "Some apt packages may not be available"
         ;;
     dnf)
