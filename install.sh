@@ -55,8 +55,21 @@ elif command -v pacman &>/dev/null; then
     PKG_MGR="pacman"
 elif command -v yum &>/dev/null; then
     PKG_MGR="yum"
+elif command -v zypper &>/dev/null; then
+    PKG_MGR="zypper"
+elif command -v apk &>/dev/null; then
+    PKG_MGR="apk"
+elif command -v brew &>/dev/null; then
+    PKG_MGR="brew"
+elif command -v xbps-install &>/dev/null; then
+    PKG_MGR="xbps"
+elif command -v emerge &>/dev/null; then
+    PKG_MGR="portage"
+elif command -v nix-env &>/dev/null; then
+    PKG_MGR="nix"
 else
-    fail "No supported package manager found (apt, dnf, pacman, yum)"
+    warn "No supported package manager found — install dependencies manually"
+    PKG_MGR="unknown"
 fi
 
 info "Detected package manager: ${BOLD}${PKG_MGR}${RESET}"
@@ -102,6 +115,32 @@ PACMAN_PKGS=(
     unzip git curl nodejs ruby
 )
 
+ZYPPER_PKGS=(
+    python3 python3-pip python3-devel
+    gcc gcc-c++ make libffi-devel libopenssl-devel
+    gmp-devel mpfr-devel mpc-devel
+    file-magic enchant-2-devel
+    tesseract-ocr exiftool
+    binwalk poppler-tools tcpflow
+    unzip git curl nodejs ruby
+)
+
+APK_PKGS=(
+    python3 py3-pip python3-dev
+    gcc g++ make musl-dev libffi-dev openssl-dev
+    gmp-dev mpfr-dev mpc1-dev
+    file enchant2
+    tesseract-ocr perl-image-exiftool
+    binwalk poppler-utils
+    unzip git curl nodejs ruby
+)
+
+BREW_PKGS=(
+    python3 libffi openssl gmp mpfr libmpc
+    tesseract exiftool binwalk poppler
+    unzip git curl node ruby
+)
+
 case "${PKG_MGR}" in
     apt)
         apt-get update -qq
@@ -115,6 +154,35 @@ case "${PKG_MGR}" in
         ;;
     pacman)
         pacman -Syu --noconfirm --needed "${PACMAN_PKGS[@]}" 2>/dev/null || warn "Some pacman packages may not be available"
+        ;;
+    zypper)
+        zypper install -y "${ZYPPER_PKGS[@]}" 2>/dev/null || warn "Some zypper packages may not be available"
+        ;;
+    apk)
+        apk add --no-cache "${APK_PKGS[@]}" 2>/dev/null || warn "Some apk packages may not be available"
+        ;;
+    brew)
+        brew install "${BREW_PKGS[@]}" 2>/dev/null || warn "Some brew packages may not be available"
+        ;;
+    xbps)
+        xbps-install -Sy python3 python3-pip python3-devel gcc make \
+            libffi-devel openssl-devel gmp-devel tesseract-ocr perl-Image-ExifTool \
+            binwalk poppler-utils unzip git curl nodejs ruby 2>/dev/null || warn "Some xbps packages may not be available"
+        ;;
+    portage)
+        emerge --noreplace dev-lang/python dev-python/pip sys-devel/gcc dev-libs/libffi \
+            dev-libs/openssl dev-libs/gmp app-text/tesseract media-libs/exiftool \
+            app-misc/binwalk app-text/poppler app-arch/unzip dev-vcs/git \
+            net-misc/curl net-libs/nodejs dev-lang/ruby 2>/dev/null || warn "Some portage packages may not be available"
+        ;;
+    nix)
+        nix-env -iA nixpkgs.python3 nixpkgs.python3Packages.pip nixpkgs.gcc nixpkgs.gnumake \
+            nixpkgs.libffi nixpkgs.openssl nixpkgs.gmp nixpkgs.tesseract \
+            nixpkgs.exiftool nixpkgs.binwalk nixpkgs.poppler_utils nixpkgs.unzip \
+            nixpkgs.git nixpkgs.curl nixpkgs.nodejs nixpkgs.ruby 2>/dev/null || warn "Some nix packages may not be available"
+        ;;
+    *)
+        warn "Skipping system packages — install python3, pip, git, and build tools manually"
         ;;
 esac
 
