@@ -1,7 +1,15 @@
 #!/usr/bin/env python
 
+import os
 from setuptools import find_packages
 from setuptools import setup
+
+def _read_version():
+    vf = os.path.join(os.path.dirname(os.path.abspath(__file__)), "VERSION")
+    if os.path.exists(vf):
+        with open(vf) as f:
+            return f.read().strip()
+    return "3.0"
 
 dependencies = [
     "wheel",
@@ -35,14 +43,14 @@ dependencies = [
 # Setup
 setup(
     name="flagr",
-    version="3.0",
+    version=_read_version(),
     python_requires=">=3.8",
     description="Automatic Capture the Flag Problem Solver",
     author="John Hammond/Caleb Stewart",
     url="https://github.com/imattas/Flagr",
     packages=find_packages(),
     package_data={"flagr": ["templates/*"]},
-    entry_points={"console_scripts": ["flagr=flagr.__main__:main"]},
+    entry_points={"console_scripts": ["flagr=flagr.cli:main"]},
     install_requires=dependencies,
     classifiers=[
         "Programming Language :: Python :: 3",
